@@ -119,4 +119,6 @@ def get_scanned_data():
     return jsonify(scanned_qr_codes)
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.getenv("PORT", 5000))  # Get PORT from environment, default to 5000
+    app.run(host="0.0.0.0", port=port, debug=True)
+
