@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #00c6ff, #0072ff);
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            color: white;
+        }
+
+        .scanner-container {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            max-width: 600px;
+            margin: auto;
+        }
+
+        h2 {
+            font-size: 24px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        video {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 10px;
+            border: 3px solid white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="scanner-container">
+        <h2>Dakshaa Event Attendance</h2>
+        <button id="start-camera">Enable Camera</button>
+        <video id="qr-video" autoplay></video>
+        <p id="scanned-count">Scanned: 0/200</p>
+        <ul id="scanned-list"></ul>
+    </div>
+
+    <script>
+        const video = document.getElementById("qr-video");
+        const startCameraButton = document.getElementById("start-camera");
+        const scannedList = document.getElementById("scanned-list");
+        const scannedCount = document.getElementById("scanned-count");
+        let scannedData = new Set();
+
+        async function requestCameraAccess() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+                startCameraButton.style.display = "none"; // Hide button after permission granted
+            } catch (err) {
+                console.error("Error accessing camera:", err);
+                alert("Camera access denied. Please allow access in your browser settings.");
+            }
+        }
+
+        startCameraButton.addEventListener("click", requestCameraAccess);
+
+        function scanQRCode() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                const canvas = document.createElement("canvas");
+                const context = canvas.getContext("2d");
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, canvas.width, canvas.height);
+
+                if (code && !scannedData.has(code.data)) {
+                    scannedData.add(code.data);
+
+                    fetch("/submit_qr", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ qr_data: code.data })
+                    })
+                    .then(response => response.json())
+                    .then(data => console.log("QR data sent successfully:", data))
+                    .catch(error => console.error("Error sending QR data:", error));
+
+                    const listItem = document.createElement("li");
+                    listItem.textContent = `${scannedData.size}. ${code.data}`;
+                    scannedList.appendChild(listItem);
+                    scannedCount.innerText = `Scanned: ${scannedData.size}/200`;
+                }
+            }
+            requestAnimationFrame(scanQRCode);
+        }
+
+        video.addEventListener("play", () => requestAnimationFrame(scanQRCode));
+    </script>
+</body>
+</html>
