@@ -10,7 +10,6 @@ google-api-python-client==2.128.0  # Google Sheets API
 Flask
 opencv-python
 numpy
-jsQR
 gspread
 oauth2client
 
