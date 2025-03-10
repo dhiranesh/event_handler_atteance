@@ -12,4 +12,4 @@ opencv-python
 numpy
 gspread
 oauth2client
-
+bcrypt==4.1.2
