@@ -5,7 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Code Scanner</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+
     <style>
         body {
             display: flex;
@@ -15,6 +17,7 @@
             height: 100vh;
             background: #f4f4f4;
             font-family: Arial, sans-serif;
+            text-align: center;
         }
 
         video {
@@ -34,6 +37,26 @@
             font-weight: bold;
             color: green;
         }
+
+        .error {
+            color: red;
+        }
+
+        button {
+            margin-top: 10px;
+            padding: 10px 15px;
+            font-size: 16px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            display: none;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
     </style>
 </head>
 
@@ -42,37 +65,72 @@
     <h2>Scan QR Code</h2>
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
-    <p class="message" id="qr-result"></p>
+    <p class="message" id="qr-result">Waiting for QR scan...</p>
+    <button id="retry-button" onclick="startCamera()">Retry Camera</button>
 
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const context = canvas.getContext('2d');
         const resultElement = document.getElementById('qr-result');
+        const retryButton = document.getElementById('retry-button');
+
+        let lastScannedCode = ""; // Prevent duplicate processing
+        let scanning = true; // Controls scanning loop
 
         async function startCamera() {
+            retryButton.style.display = "none"; // Hide retry button
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = stream;
-                scanQRCode();
+                video.onloadedmetadata = () => {
+                    scanning = true;
+                    scanQRCode();
+                };
             } catch (error) {
-                console.error("Error accessing the camera: ", error);
+                console.error("Camera access denied:", error);
+                resultElement.textContent = "Camera access denied! Please allow camera permissions.";
+                resultElement.classList.add("error");
+                retryButton.style.display = "block"; // Show retry button
             }
         }
 
         function scanQRCode() {
+            if (!scanning) return;
+
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            setInterval(() => {
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-                const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
 
-                if (qrCode) {
-                    resultElement.textContent = `Scanned: ${qrCode.data}`;
-                    sendQRCodeToServer(qrCode.data);
+            const scanInterval = setInterval(() => {
+                if (!scanning) {
+                    clearInterval(scanInterval);
+                    return;
                 }
-            }, 500);
+
+                try {
+                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                    const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
+
+                    if (qrCode && qrCode.data !== lastScannedCode) {
+                        lastScannedCode = qrCode.data;
+                        resultElement.textContent = `Scanned: ${qrCode.data}`;
+                        resultElement.style.color = "green";
+                        scanning = false; // Stop scanning after successful scan
+
+                        sendQRCodeToServer(qrCode.data);
+
+                        setTimeout(() => {
+                            scanning = true; // Restart scanning after delay
+                            scanQRCode();
+                        }, 3000);
+                    }
+                } catch (err) {
+                    console.error("QR scanning error:", err);
+                    resultElement.textContent = "Scanning error. Please try again.";
+                    resultElement.classList.add("error");
+                }
+            }, 1000); // Scan every second
         }
 
         function sendQRCodeToServer(qrData) {
@@ -91,12 +149,17 @@
                     resultElement.style.color = "red";
                 }
             })
-            .catch(error => console.error("Error submitting QR:", error));
+            .catch(error => {
+                console.error("Error submitting QR:", error);
+                resultElement.textContent = "Error submitting QR. Please try again.";
+                resultElement.classList.add("error");
+            });
         }
 
-        startCamera();
+        document.addEventListener("DOMContentLoaded", () => {
+            startCamera();
+        });
     </script>
 
 </body>
-
 </html>
