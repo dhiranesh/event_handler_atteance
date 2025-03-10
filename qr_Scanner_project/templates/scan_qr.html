@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,101 +8,95 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
     <style>
         body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #f4f4f4;
             font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #00c6ff, #0072ff);
-            text-align: center;
-            margin: 0;
-            padding: 20px;
-            color: white;
-        }
-
-        .scanner-container {
-            background: rgba(255, 255, 255, 0.2);
-            backdrop-filter: blur(10px);
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-            max-width: 600px;
-            margin: auto;
-        }
-
-        h2 {
-            font-size: 24px;
-            margin-bottom: 15px;
-            font-weight: bold;
         }
 
         video {
             width: 100%;
             max-width: 500px;
+            border: 5px solid #007BFF;
             border-radius: 10px;
-            border: 3px solid white;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        canvas {
+            display: none;
+        }
+
+        .message {
+            margin-top: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            color: green;
         }
     </style>
 </head>
+
 <body>
-    <div class="scanner-container">
-        <h2>Dakshaa Event Attendance</h2>
-        <button id="start-camera">Enable Camera</button>
-        <video id="qr-video" autoplay></video>
-        <p id="scanned-count">Scanned: 0/200</p>
-        <ul id="scanned-list"></ul>
-    </div>
+
+    <h2>Scan QR Code</h2>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+    <p class="message" id="qr-result"></p>
 
     <script>
-        const video = document.getElementById("qr-video");
-        const startCameraButton = document.getElementById("start-camera");
-        const scannedList = document.getElementById("scanned-list");
-        const scannedCount = document.getElementById("scanned-count");
-        let scannedData = new Set();
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+        const resultElement = document.getElementById('qr-result');
 
-        async function requestCameraAccess() {
+        async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = stream;
-                startCameraButton.style.display = "none"; // Hide button after permission granted
-            } catch (err) {
-                console.error("Error accessing camera:", err);
-                alert("Camera access denied. Please allow access in your browser settings.");
+                scanQRCode();
+            } catch (error) {
+                console.error("Error accessing the camera: ", error);
             }
         }
-
-        startCameraButton.addEventListener("click", requestCameraAccess);
 
         function scanQRCode() {
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                const canvas = document.createElement("canvas");
-                const context = canvas.getContext("2d");
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            setInterval(() => {
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
                 const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, canvas.width, canvas.height);
+                const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
 
-                if (code && !scannedData.has(code.data)) {
-                    scannedData.add(code.data);
-
-                    fetch("/submit_qr", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ qr_data: code.data })
-                    })
-                    .then(response => response.json())
-                    .then(data => console.log("QR data sent successfully:", data))
-                    .catch(error => console.error("Error sending QR data:", error));
-
-                    const listItem = document.createElement("li");
-                    listItem.textContent = `${scannedData.size}. ${code.data}`;
-                    scannedList.appendChild(listItem);
-                    scannedCount.innerText = `Scanned: ${scannedData.size}/200`;
+                if (qrCode) {
+                    resultElement.textContent = `Scanned: ${qrCode.data}`;
+                    sendQRCodeToServer(qrCode.data);
                 }
-            }
-            requestAnimationFrame(scanQRCode);
+            }, 500);
         }
 
-        video.addEventListener("play", () => requestAnimationFrame(scanQRCode));
+        function sendQRCodeToServer(qrData) {
+            fetch("/submit_qr", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ qr_data: qrData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    resultElement.textContent = "QR Code successfully submitted!";
+                    resultElement.style.color = "green";
+                } else {
+                    resultElement.textContent = "Duplicate or invalid QR!";
+                    resultElement.style.color = "red";
+                }
+            })
+            .catch(error => console.error("Error submitting QR:", error));
+        }
+
+        startCamera();
     </script>
+
 </body>
+
 </html>
