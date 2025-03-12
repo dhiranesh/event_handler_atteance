@@ -16,7 +16,7 @@ app.config["SESSION_TIMEOUT"] = 1800  # Auto logout after 30 minutes
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Google Sheets Web App URL
-GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbyCjhsbI0SdZcspgWFPiBNMu1BSo7y4j4jGQ2XfoseiXZpzRJ4FWWJD53LztIMuS3DP/exec"
+GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbwiRT_fveon16rCYOPQg3modw4KUHHkzZSIhdc8Y3iva3LMYSMHQAwd3l7911rDJiVp/exec"
 
 # Excel File for saving scanned data
 EXCEL_FILE = "scanned_data.xlsx"
