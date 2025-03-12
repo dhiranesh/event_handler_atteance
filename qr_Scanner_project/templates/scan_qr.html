@@ -1,12 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Code Scanner</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-
 
     <style>
         body {
@@ -19,31 +17,40 @@
             font-family: Arial, sans-serif;
             text-align: center;
         }
-
         video {
             width: 100%;
             max-width: 500px;
             border: 5px solid #007BFF;
             border-radius: 10px;
         }
-
         canvas {
             display: none;
         }
-
         .message {
             margin-top: 15px;
             font-size: 18px;
             font-weight: bold;
             color: green;
         }
-
         .error {
             color: red;
         }
-
+        input {
+            margin-top: 15px;
+            padding: 10px;
+            font-size: 16px;
+            width: 80%;
+            max-width: 400px;
+            text-align: center;
+            border: 2px solid #007BFF;
+            border-radius: 5px;
+        }
+        .button-container {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
         button {
-            margin-top: 10px;
             padding: 10px 15px;
             font-size: 16px;
             background-color: #007BFF;
@@ -51,35 +58,49 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            display: none;
         }
-
         button:hover {
             background-color: #0056b3;
+        }
+        #submit-button {
+            display: none;
         }
     </style>
 </head>
 
 <body>
-
     <h2>Scan QR Code</h2>
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
+
     <p class="message" id="qr-result">Waiting for QR scan...</p>
-    <button id="retry-button" onclick="startCamera()">Retry Camera</button>
+    <input type="text" id="qr-input" readonly placeholder="Scanned QR Code will appear here">
+
+    <div class="button-container">
+        <button id="submit-button" onclick="submitQRCode()">Submit</button>
+        <button id="retry-button" onclick="startCamera()">Retry Camera</button>
+    </div>
 
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
-        const context = canvas.getContext('2d');
+        const context = canvas.getContext('2d', { willReadFrequently: true });
         const resultElement = document.getElementById('qr-result');
+        const qrInput = document.getElementById('qr-input');
+        const submitButton = document.getElementById('submit-button');
         const retryButton = document.getElementById('retry-button');
 
-        let lastScannedCode = ""; // Prevent duplicate processing
-        let scanning = true; // Controls scanning loop
+        let lastScannedCode = "";
+        let scanning = true;
+        let scanInterval;
 
         async function startCamera() {
-            retryButton.style.display = "none"; // Hide retry button
+            retryButton.style.display = "none";
+            submitButton.style.display = "none";
+            qrInput.value = "";
+            resultElement.textContent = "Waiting for QR scan...";
+            resultElement.style.color = "black";
+
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = stream;
@@ -91,49 +112,38 @@
                 console.error("Camera access denied:", error);
                 resultElement.textContent = "Camera access denied! Please allow camera permissions.";
                 resultElement.classList.add("error");
-                retryButton.style.display = "block"; // Show retry button
+                retryButton.style.display = "block";
             }
         }
 
         function scanQRCode() {
             if (!scanning) return;
 
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+            clearInterval(scanInterval);
+            scanInterval = setInterval(() => {
+                if (!scanning || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
-            const scanInterval = setInterval(() => {
-                if (!scanning) {
-                    clearInterval(scanInterval);
-                    return;
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
+
+                if (qrCode && qrCode.data !== lastScannedCode) {
+                    lastScannedCode = qrCode.data;
+                    resultElement.textContent = `Scanned: ${qrCode.data}`;
+                    resultElement.style.color = "green";
+                    qrInput.value = qrCode.data;
+                    submitButton.style.display = "inline-block";
+                    scanning = false;
                 }
-
-                try {
-                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-                    const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
-
-                    if (qrCode && qrCode.data !== lastScannedCode) {
-                        lastScannedCode = qrCode.data;
-                        resultElement.textContent = `Scanned: ${qrCode.data}`;
-                        resultElement.style.color = "green";
-                        scanning = false; // Stop scanning after successful scan
-
-                        sendQRCodeToServer(qrCode.data);
-
-                        setTimeout(() => {
-                            scanning = true; // Restart scanning after delay
-                            scanQRCode();
-                        }, 3000);
-                    }
-                } catch (err) {
-                    console.error("QR scanning error:", err);
-                    resultElement.textContent = "Scanning error. Please try again.";
-                    resultElement.classList.add("error");
-                }
-            }, 1000); // Scan every second
+            }, 200);
         }
 
-        function sendQRCodeToServer(qrData) {
+        function submitQRCode() {
+            const qrData = qrInput.value;
+            if (!qrData) return;
+
             fetch("/submit_qr", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -148,18 +158,32 @@
                     resultElement.textContent = "Duplicate or invalid QR!";
                     resultElement.style.color = "red";
                 }
+                resetScanner(); // Restart scanner after submission
             })
             .catch(error => {
                 console.error("Error submitting QR:", error);
                 resultElement.textContent = "Error submitting QR. Please try again.";
                 resultElement.classList.add("error");
+                resetScanner();
             });
+
+            submitButton.style.display = "none";
+        }
+
+        function resetScanner() {
+            setTimeout(() => {
+                lastScannedCode = "";
+                qrInput.value = "";
+                resultElement.textContent = "Waiting for QR scan...";
+                resultElement.style.color = "black";
+                scanning = true;
+                scanQRCode();
+            }, 3000);
         }
 
         document.addEventListener("DOMContentLoaded", () => {
             startCamera();
         });
     </script>
-
 </body>
 </html>
