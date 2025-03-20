@@ -15,14 +15,14 @@ app.config["SESSION_TIMEOUT"] = 1800  # Auto logout after 30 minutes
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Google Sheets Web App URL
-GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbwiRT_fveon16rCYOPQg3modw4KUHHkzZSIhdc8Y3iva3LMYSMHQAwd3l7911rDJiVp/exec"
+# Google Apps Script Web App URL
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw56PD0KHSu_KlZcv7l9GgmHaXLOPwcw5GSTygOoBRZMnDazXjgYU9x4vCVRYU6Bubq/exec"
 
-# Excel File for saving scanned data
-EXCEL_FILE = "scanned_data.xlsx"
-
-# User Database (JSON-based, no SQL)
+# User Database (JSON-based)
 USER_DB_FILE = "users.json"
+
+# Excel File for storing scanned QR codes
+EXCEL_FILE = "scanned_data.xlsx"
 
 scanned_qr_codes = set()
 
@@ -45,12 +45,28 @@ def save_users(users):
     except Exception as e:
         logging.error(f"Error saving user database: {e}")
 
-# Initialize admin account if not exists
+# Initialize default users if they do not exist
 users = load_users()
-if "admin" not in users:
-    hashed_password = bcrypt.hashpw("admin@ksrct".encode(), bcrypt.gensalt()).decode()
-    users["admin"] = hashed_password
-    save_users(users)
+
+# List of default users with unique passwords
+default_users = {
+    "admin": "admin@ksrct",
+    "user123": "admin123@123"
+}
+
+# Generate unique passwords for user1 to user9
+for i in range(1, 10):
+    default_users[f"user{i}"] = f"user{i}_pass{i*111}"  # Example: user1_pass111, user2_pass222, ...
+
+# Create users if they don't exist
+for username, password in default_users.items():
+    if username not in users:
+        hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        users[username] = hashed_password
+        logging.info(f"✅ Default user '{username}' added with password: {password}")
+
+# Save updated user list
+save_users(users)
 
 # Function to authenticate users
 def authenticate_user(username, password):
@@ -60,30 +76,31 @@ def authenticate_user(username, password):
         return bcrypt.checkpw(password.encode(), stored_hashed_pw)
     return False
 
-# Function to send data to Google Sheets
-def send_to_google_sheets(data):
+# Function to send QR data to Google Apps Script
+def send_to_google_script(qr_data):
     try:
-        response = requests.post(GOOGLE_SHEET_URL, json={"data": data}, timeout=5)
-        response_json = response.json()  # Parse response
-        logging.info(f"Google Sheets Response: {response_json}")  # Log response
+        response = requests.post(GOOGLE_APPS_SCRIPT_URL, json={"qr_data": qr_data}, timeout=5)
+        response_json = response.json()
+        logging.info(f"Google Script Response: {response_json}")
 
-        return response_json.get("status") == "success"
+        return response_json
     except requests.RequestException as e:
-        logging.error(f"Error sending data to Google Sheets: {e}")
-        return False
+        logging.error(f"Error sending data to Google Apps Script: {e}")
+        return {"success": False, "message": "Error sending data to Google Script"}
 
-# Function to save data to Excel
-def save_to_excel(data):
-    df_new = pd.DataFrame([[data]], columns=["Scanned Data"])
+# Function to clear and save scanned QR code to Excel
+def save_to_excel(qr_data):
     try:
-        if os.path.exists(EXCEL_FILE):
-            try:
-                existing_df = pd.read_excel(EXCEL_FILE)
-                df_new = pd.concat([existing_df, df_new], ignore_index=True)
-            except Exception:
-                logging.warning("Excel file corrupted or unreadable. Creating a new one.")
+        # # Clear old data
+        # df = pd.DataFrame(columns=["Timestamp", "Scanned Data"])
+        # df.to_excel(EXCEL_FILE, index=False)
+
+        # Add new QR data with timestamp
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")  # Format: YYYY-MM-DD HH:MM:SS
+        df_new = pd.DataFrame([[timestamp, qr_data]], columns=["Timestamp", "Scanned Data"])
         df_new.to_excel(EXCEL_FILE, index=False)
-        logging.info(f"✅ Data saved to Excel: {data}")
+
+        logging.info(f"✅ Data saved to Excel: {qr_data} at {timestamp}")
     except Exception as e:
         logging.warning(f"⚠️ Error updating Excel file: {e}")
 
@@ -144,10 +161,13 @@ def submit_qr():
 
     scanned_qr_codes.add(data)
 
-    success = send_to_google_sheets(data)
+    # Send QR data to Google Apps Script
+    response = send_to_google_script(data)
+
+    # Save QR code to Excel
     save_to_excel(data)
 
-    return jsonify({"success": success, "message": "QR scanned successfully"})
+    return jsonify(response)
 
 # Route: Retrieve Scanned QR Codes
 @app.route("/get_scanned_data", methods=["GET"])
@@ -155,6 +175,6 @@ def get_scanned_data():
     return jsonify(list(scanned_qr_codes))
 
 # Run Flask Application
-if __name__ == "__main__":
+if __name__ == "__main__":    
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
