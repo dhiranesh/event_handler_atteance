@@ -11,7 +11,7 @@
     <style>
         /* Full-page background */
         body {
-            background-color: #333; no-repeat center center fixed;
+            background-color: #333 no-repeat center fixed;
             background-size: cover;
             font-family: Arial, sans-serif;
             display: flex;
@@ -23,7 +23,7 @@
 
         /* Login container */
         .login-container {
-            background:rgb(200, 200, 200);
+            background: rgb(200, 200, 200);
             padding: 25px;
             border-radius: 12px;
             box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.3);
@@ -107,19 +107,21 @@
 
         <!-- Display error message if login fails -->
         {% with messages = get_flashed_messages(with_categories=True) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="error-message">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="error-message">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
         {% endwith %}
 
         <form action="{{ url_for('login') }}" method="POST">
             <label for="username">Username:</label>
-            <input type="text" id="username" name="username" required aria-label="Enter your username" autocomplete="off">
+            <input type="text" id="username" name="username" required aria-label="Enter your username"
+                autocomplete="off">
 
             <label for="password">Password:</label>
-            <input type="password" id="password" name="password" required aria-label="Enter your password" autocomplete="off">
+            <input type="password" id="password" name="password" required aria-label="Enter your password"
+                autocomplete="off">
 
             <button type="submit">Login</button>
         </form>
